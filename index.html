@@ -85,6 +85,19 @@ input:focus,select:focus{outline:2px solid var(--gold);border-color:var(--gold)}
 .irow.given .nm{text-decoration:line-through;color:var(--muted)}
 .dc{font-weight:800;min-width:40px;text-align:center;color:var(--blue)}
 .paybox{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.checks{display:flex;gap:10px;margin-top:12px}
+.ck{flex:1;display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--line);border-radius:12px;font-weight:800;font-size:15px;color:var(--blue);background:#fff;cursor:pointer;line-height:1.15}
+.ck input{width:26px;height:26px;margin:0;flex:none;accent-color:var(--ok);cursor:pointer}
+.ck small{display:block;font-weight:600;font-size:12px;color:var(--muted)}
+.ck.on{background:var(--okbg);border-color:#9fd8b2;color:var(--ok)}
+.ledger{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:14px}
+.ledger table{white-space:nowrap}
+.ledger th{background:var(--cream);font-size:13px;padding:11px 10px}
+.ledger td{padding:11px 10px;vertical-align:middle}
+.ledger td.c,.ledger th.c{text-align:center}
+.ledger td.c input{width:26px;height:26px;accent-color:var(--ok);cursor:pointer}
+.ledger td.c small{display:block;font-size:11px;color:var(--muted);font-weight:700}
+.ledger tr.done td{background:#f6fbf7}
 .paybox .money{font-family:"Rozha One",Georgia,serif;font-size:24px;color:var(--red)}
 .mrow{display:grid;grid-template-columns:1fr 90px 54px 40px;gap:8px;align-items:center;margin-bottom:8px}
 .mrow input{padding:9px}
@@ -177,6 +190,10 @@ td.r,th.r{text-align:right}
 
 <!-- ORDERS -->
 <section class="tab" id="tab-orders">
+  <div class="seg" id="viewSeg" style="margin-bottom:10px">
+    <button data-v="cards" class="on" onclick="setView('cards')">Order cards</button>
+    <button data-v="ledger" onclick="setView('ledger')">Ledger table</button>
+  </div>
   <div class="chips" id="filterChips"></div>
   <input id="searchBox" placeholder="Search token, name or mobile" oninput="renderOrders()" style="margin-bottom:12px">
   <div id="ordersList"></div>
@@ -246,6 +263,7 @@ td.r,th.r{text-align:right}
     <input id="askInput" autocomplete="off" style="display:none;margin-top:12px">
     <div class="row" style="margin-top:16px;flex-wrap:nowrap">
       <button class="btn ghost" style="flex:1" id="askNo">Cancel</button>
+      <button class="btn blue" style="flex:1;display:none" id="askAlt"></button>
       <button class="btn red" style="flex:1" id="askYes">Yes</button>
     </div>
   </div>
@@ -277,13 +295,15 @@ const timeStr = t => new Date(t).toLocaleTimeString("en-IN",{hour:"2-digit",minu
 function ask(msg, opt){
   opt = opt || {};
   return new Promise(res => {
-    const m=$("askModal"), inp=$("askInput"), yes=$("askYes"), no=$("askNo");
+    const m=$("askModal"), inp=$("askInput"), yes=$("askYes"), no=$("askNo"), alt=$("askAlt");
+    alt.style.display = opt.alt ? "" : "none"; alt.textContent = opt.alt || "";
     $("askMsg").textContent = msg;
     yes.textContent = opt.ok || "Yes";
-    yes.className = "btn " + (opt.safe ? "blue" : "red");
+    yes.className = "btn " + (opt.alt ? "gold" : opt.safe ? "blue" : "red");
     no.style.display = opt.info ? "none" : "";
     inp.style.display = opt.typed ? "block" : "none"; inp.value = ""; inp.placeholder = opt.typed ? "Type "+opt.typed : "";
-    const done = v => { m.classList.remove("on"); yes.onclick = no.onclick = null; res(v); };
+    const done = v => { m.classList.remove("on"); yes.onclick = no.onclick = alt.onclick = null; res(v); };
+    alt.onclick = () => done("alt");
     yes.onclick = () => { if (opt.typed && inp.value.trim().toUpperCase() !== opt.typed) { toast("Type "+opt.typed+" to confirm"); return; } done(true); };
     no.onclick = () => done(false);
     m.classList.add("on");
@@ -339,7 +359,7 @@ function nextToken(){ return db.tokenDate === dayKey() ? db.lastToken + 1 : 1; }
 function showTab(t){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
   document.querySelectorAll(".tab").forEach(s=>s.classList.toggle("on", s.id==="tab-"+t));
-  if(t==="orders") renderOrders();
+  if(t==="orders") setView(view);
   if(t==="menu") renderMenuEdit();
   if(t==="summary") renderSummary();
   if(t==="new") renderMenuGrid();
@@ -430,16 +450,38 @@ let filter = "active";
 const FILTERS = [
   ["active","Open", o=>o.date===dayKey() && !(isPaid(o)&&isDelivered(o))],
   ["deliver","To deliver", o=>!isDelivered(o)],
+  ["unpaid","Unpaid", o=>!isPaid(o)],
   ["today","All today", o=>o.date===dayKey()],
   ["all","All days", ()=>true]
 ];
 function renderOrders(){
-  $("filterChips").innerHTML = FILTERS.map(([k,l,fn])=>`<button class="chip ${filter===k?"on":""}" onclick="filter='${k}';renderOrders()">${l} (${db.orders.filter(fn).length})</button>`).join("");
+  $("filterChips").innerHTML = FILTERS.filter(([k,l,fn])=>k!=="unpaid"||filter==="unpaid"||db.orders.some(fn)).map(([k,l,fn])=>`<button class="chip ${filter===k?"on":""}" onclick="filter='${k}';renderOrders()">${l} (${db.orders.filter(fn).length})</button>`).join("");
   const fn = FILTERS.find(f=>f[0]===filter)[2];
   const q = $("searchBox").value.trim().toLowerCase();
   const list = db.orders.filter(fn).filter(o=>!q || o.token.toLowerCase().includes(q.replace("#","")) || o.name.toLowerCase().includes(q) || (o.mobile||"").includes(q))
     .sort((a,b)=>b.time-a.time);
-  $("ordersList").innerHTML = list.length ? list.map(orderCard).join("") : `<div class="empty">No orders here</div>`;
+  if(!list.length){ $("ordersList").innerHTML = `<div class="empty">No orders here</div>`; return; }
+  $("ordersList").innerHTML = view==="ledger" ? ledgerTable(list) : list.map(orderCard).join("");
+}
+let view = "cards";
+try { view = localStorage.getItem("hotOrdersView") || "cards"; } catch(e) {}
+function setView(v){
+  view = v; try { localStorage.setItem("hotOrdersView", v); } catch(e) {}
+  document.querySelectorAll("#viewSeg button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
+  renderOrders();
+}
+function ledgerTable(list){
+  return `<div class="ledger"><table>
+    <tr><th>Token</th><th>Name</th><th>Mobile</th><th>Items Ordered</th><th class="r">Amount</th><th class="c">Payment<br>Received</th><th class="c">Delivery<br>of Order</th></tr>
+    ${list.map(o=>{ const paid=isPaid(o), del=isDelivered(o), g=qtyGiven(o), t=qtyTotal(o); return `<tr class="${paid&&del?"done":""}">
+      <td><b style="color:var(--blue)">#${esc(o.token)}</b><br><small style="color:var(--muted)">${o.date===dayKey()?"":esc(o.date.split("-").reverse().join("/"))+" "}${timeStr(o.time)}</small></td>
+      <td>${esc(o.name)}</td><td>${esc(o.mobile||"-")}</td>
+      <td>${o.items.map(i=>`${i.qty}× ${esc(i.name)}`).join("<br>")}</td>
+      <td class="r"><b>${rs(o.total)}</b></td>
+      <td class="c"><input type="checkbox" ${paid?"checked":""} onclick="togglePay(event,${o.id})" aria-label="Payment received"><small>${paid?esc(o.payMode):"&nbsp;"}</small></td>
+      <td class="c"><input type="checkbox" ${del?"checked":""} onclick="toggleDel(event,${o.id})" aria-label="Delivered"><small>${del?"Done":g?g+"/"+t:"&nbsp;"}</small></td>
+    </tr>`; }).join("")}
+  </table></div>`;
 }
 function orderCard(o){
   const del = isDelivered(o), paid = isPaid(o), given = qtyGiven(o), tot = qtyTotal(o);
@@ -456,14 +498,14 @@ function orderCard(o){
       <button class="btn sm ghost" onclick="deliver(${o.id},${i},-1)" ${it.delivered<=0?"disabled":""}>↺</button>
       <button class="btn sm green" onclick="deliver(${o.id},${i},1)" ${it.delivered>=it.qty?"disabled":""}>Give 1</button>
     </div>`).join("")}
-    <div class="row" style="margin-top:8px">
-      ${!del?`<button class="btn sm green" onclick="deliverAll(${o.id})">✓ All items handed over</button>`:""}
+    <div class="checks">
+      <label class="ck ${paid?"on":""}"><input type="checkbox" ${paid?"checked":""} onclick="togglePay(event,${o.id})"><span>Payment received<small>${paid?esc(o.payMode):"Cash / UPI"}</small></span></label>
+      <label class="ck ${del?"on":""}"><input type="checkbox" ${del?"checked":""} onclick="toggleDel(event,${o.id})"><span>Delivered<small>${del?"All items given":given+" of "+tot+" given"}</small></span></label>
     </div>
     <div class="paybox">
       <b class="money">${rs(o.total)}</b>
       <div class="row">
-        ${paid ? `<button class="btn sm ghost" onclick="switchMode(${o.id})">Change to ${o.payMode==="UPI"?"Cash":"UPI"}</button>`
-               : `<button class="btn sm gold" onclick="pay(${o.id},'Cash')">Paid Cash</button><button class="btn sm blue" onclick="pay(${o.id},'UPI')">Paid UPI</button>`}
+        ${paid && (o.payMode==="Cash"||o.payMode==="UPI") ? `<button class="btn sm ghost" onclick="switchMode(${o.id})">Change to ${o.payMode==="UPI"?"Cash":"UPI"}</button>` : ""}
       </div>
     </div>
     <div class="row" style="margin-top:10px;justify-content:space-between">
@@ -475,6 +517,25 @@ function orderCard(o){
 const findO = id => db.orders.find(x=>x.id===id);
 function deliver(id,i,d){ const o=findO(id); const it=o.items[i]; it.delivered=Math.max(0,Math.min(it.qty,it.delivered+d)); if(isDelivered(o)) o.deliveredAt=Date.now(); save(); renderOrders(); }
 function deliverAll(id){ const o=findO(id); o.items.forEach(it=>it.delivered=it.qty); o.deliveredAt=Date.now(); save(); renderOrders(); toast("Token #"+o.token+" handed over"); }
+async function togglePay(e,id){
+  e.preventDefault();                      // the box changes only after the confirm
+  const o=findO(id);
+  if(isPaid(o)){
+    if(!await ask(`Untick payment for token #${o.token}? It will show as NOT paid (${rs(o.total)} to collect).`,{ok:"Mark not paid"})) return;
+    o.payStatus="pending"; o.payMode=""; o.paidAt=null; save(); renderOrders(); toast("#"+o.token+" marked not paid");
+  } else {
+    const r = await ask(`Payment of ${rs(o.total)} for token #${o.token} received by?`,{ok:"Cash",alt:"UPI"});
+    if(r) pay(id, r==="alt" ? "UPI" : "Cash");
+  }
+}
+async function toggleDel(e,id){
+  e.preventDefault();
+  const o=findO(id);
+  if(isDelivered(o)){
+    if(!await ask(`Untick delivery for token #${o.token}? All its items will show as not given.`,{ok:"Untick",safe:true})) return;
+    o.items.forEach(it=>it.delivered=0); o.deliveredAt=null; save(); renderOrders();
+  } else deliverAll(id);
+}
 function pay(id,mode){ const o=findO(id); o.payStatus="paid"; o.payMode=mode; o.paidAt=Date.now(); save(); renderOrders(); toast(rs(o.total)+" received by "+mode); }
 async function switchMode(id){ const o=findO(id); const to=o.payMode==="UPI"?"Cash":"UPI"; if(!await ask(`Token #${o.token}: change payment from ${o.payMode} to ${to}?`,{ok:"Change to "+to,safe:true})) return; o.payMode=to; save(); renderOrders(); toast("Changed to "+to); }
 async function delOrder(id){ const o=findO(id); if(!await ask(`Delete token #${o.token} (${o.name}, ${rs(o.total)})? This cannot be undone.`,{ok:"Delete"})) return; db.orders=db.orders.filter(x=>x.id!==id); save(); renderOrders(); }
