@@ -1,5 +1,5 @@
 // House of Tawi Counter — offline cache
-const CACHE = "hot-counter-v3";
+const CACHE = "hot-counter-v4";
 const SHELL = ["./", "index.html", "manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
