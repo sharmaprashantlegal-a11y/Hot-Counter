@@ -104,7 +104,7 @@ td.r,th.r{text-align:right}
 .modal{position:fixed;inset:0;background:rgba(18,50,77,.7);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 .modal.on{display:flex}
 .mbox{background:var(--cream);border-radius:18px;padding:16px;width:100%;max-width:360px;max-height:92vh;overflow:auto}
-.coupon{background:#fff;border:2px dashed var(--blue);border-radius:14px;padding:16px;text-align:center;color:#000}
+.slip{background:#fff;border:2px dashed var(--blue);border-radius:14px;padding:16px;text-align:center;color:#000}
 .c-brand{font-family:"Rozha One",Georgia,serif;font-size:24px;letter-spacing:1px;color:var(--blue)}
 .c-sub{font-size:12px;margin-bottom:6px;letter-spacing:3px;color:var(--red);font-weight:700}
 .c-lbl{font-size:12px;letter-spacing:4px;margin-top:6px;font-weight:700}
@@ -123,8 +123,8 @@ td.r,th.r{text-align:right}
   @page{margin:4mm}
   body{background:#fff}
   body *{visibility:hidden}
-  #couponCard,#couponCard *{visibility:visible}
-  #couponCard{position:absolute;left:0;top:0;width:72mm;border:1px dashed #000}
+  #slipCard,#slipCard *{visibility:visible}
+  #slipCard{position:absolute;left:0;top:0;width:72mm;border:1px dashed #000}
 }
 </style>
 </head>
@@ -163,31 +163,15 @@ td.r,th.r{text-align:right}
       <div><label>Customer name (optional)</label><input id="custName" placeholder="Walk-in"></div>
       <div><label>Mobile (optional)</label><input id="custMobile" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit number"></div>
     </div>
-    <div style="margin-top:12px">
-      <label>Discount coupon code</label>
-      <div class="row" style="flex-wrap:nowrap">
-        <input id="couponInput" placeholder="e.g. FEST10" style="text-transform:uppercase">
-        <button class="btn sm" onclick="applyCoupon()">Apply</button>
-      </div>
-      <div class="hint" id="couponMsg"></div>
-    </div>
-    <div style="margin-top:12px">
-      <label>Payment</label>
-      <div class="seg" id="paySeg">
-        <button data-p="pending" class="on" onclick="setPay('pending')">Pay later</button>
-        <button data-p="Cash" onclick="setPay('Cash')">Cash</button>
-        <button data-p="UPI" onclick="setPay('UPI')">UPI</button>
-      </div>
-    </div>
     <div style="margin-top:14px">
-      <div class="tot"><span>Subtotal</span><span id="tSub">₹0</span></div>
-      <div class="tot" id="tDiscRow" style="display:none;color:var(--ok)"><span id="tDiscLbl">Discount</span><span id="tDisc">−₹0</span></div>
       <div class="tot big"><span>Total</span><span id="tTot">₹0</span></div>
     </div>
-    <div class="row" style="margin-top:12px;flex-wrap:nowrap">
-      <button class="btn ghost" onclick="clearCart()">Clear</button>
-      <button class="btn full" onclick="createOrder()">Create order &amp; token</button>
+    <label style="margin-top:14px">Payment received? Token is generated only after payment.</label>
+    <div class="g2" style="grid-template-columns:1fr 1fr">
+      <button class="btn full gold" onclick="createOrder('Cash')">Cash received</button>
+      <button class="btn full blue" onclick="createOrder('UPI')">UPI received</button>
     </div>
+    <button class="btn ghost" style="width:100%;margin-top:10px" onclick="clearCart()">Clear order</button>
   </div>
 </section>
 
@@ -210,18 +194,6 @@ td.r,th.r{text-align:right}
       <button class="btn sm green" style="grid-column:span 2" onclick="addMenuItem()">+ Add</button>
     </div>
     <div class="hint">Untick "On" to hide an item for the day (e.g. sold out) without deleting it. Price changes apply only to new orders — past orders keep the price they were billed at.</div>
-  </div>
-  <div class="card">
-    <h2>Discount coupons</h2>
-    <div id="couponEdit"></div>
-    <div class="g2" style="margin-top:10px">
-      <input id="newCode" placeholder="Code e.g. FEST10" style="text-transform:uppercase">
-      <div class="row" style="flex-wrap:nowrap">
-        <input id="newVal" type="number" inputmode="numeric" placeholder="Value">
-        <select id="newType" style="width:auto"><option value="pct">%</option><option value="flat">₹ off</option></select>
-      </div>
-    </div>
-    <button class="btn sm green" style="margin-top:10px" onclick="addCoupon()">+ Add coupon</button>
   </div>
   <div class="card">
     <h2>Token counter</h2>
@@ -258,9 +230,9 @@ td.r,th.r{text-align:right}
 </main>
 <footer class="foot"><div class="t">Ghar ka bana. <span>Made with love.</span></div><div class="s">@hothouseoftawi · +91 99243 35882</div></footer>
 
-<div class="modal" id="couponModal" onclick="if(event.target===this)closeModal()">
+<div class="modal" id="slipModal" onclick="if(event.target===this)closeModal()">
   <div class="mbox">
-    <div id="couponCard" class="coupon"></div>
+    <div id="slipCard" class="slip"></div>
     <div class="row" style="margin-top:12px;flex-wrap:nowrap">
       <button class="btn ghost sm" style="flex:1" onclick="window.print()">Print</button>
       <button class="btn green sm" style="flex:1" id="waBtn">WhatsApp</button>
@@ -328,9 +300,10 @@ function load(){
   if (d && Array.isArray(d.orders)) {
     // phone already has data: bring the menu up to the brand-kit menu once, orders untouched
     if (d.menuVer !== MENU_VER) { d.menu = DEFAULT_MENU.map(m=>({...m})); d.menuVer = MENU_VER; }
+    delete d.coupons;   // discount coupons are no longer used
     return d;
   }
-  d = { menu: DEFAULT_MENU.map(m=>({...m})), menuVer: MENU_VER, coupons: [], orders: [], tokenDate: "", lastToken: 0 };
+  d = { menu: DEFAULT_MENU.map(m=>({...m})), menuVer: MENU_VER, orders: [], tokenDate: "", lastToken: 0 };
   // bring over entries from the old ledger, if any
   try {
     const old = JSON.parse(localStorage.getItem("offlineLedgerApp")) || [];
@@ -343,7 +316,7 @@ function load(){
       });
       d.orders.push({ id: t + i, token: "OLD-" + (i+1), date: dayKey(new Date(t)), time: t,
         name: o.name || "Walk-in", mobile: o.mobile === "-" ? "" : (o.mobile||""), items,
-        subtotal: +o.amount || 0, couponCode: "", discount: 0, total: +o.amount || 0,
+        subtotal: +o.amount || 0, total: +o.amount || 0,
         payStatus: o.paymentReceived ? "paid" : "pending", payMode: o.paymentReceived ? "Not recorded" : "" });
     });
   } catch(e) {}
@@ -375,8 +348,6 @@ function showTab(t){
 
 /* ---------- new order ---------- */
 let cart = {};          // menuId -> qty
-let payChoice = "pending";
-let appliedCoupon = null;
 
 function renderMenuGrid(){
   const items = db.menu.filter(m=>m.active);
@@ -390,16 +361,10 @@ function renderMenuGrid(){
 }
 function addToCart(id){ cart[id]=(cart[id]||0)+1; renderCart(); }
 function changeQty(id,d){ cart[id]=(cart[id]||0)+d; if(cart[id]<=0) delete cart[id]; renderCart(); }
-function clearCart(){ cart={}; appliedCoupon=null; $("couponInput").value=""; $("couponMsg").textContent=""; $("custName").value=""; $("custMobile").value=""; setPay("pending"); renderCart(); }
-function setPay(p){ payChoice=p; document.querySelectorAll("#paySeg button").forEach(b=>b.classList.toggle("on",b.dataset.p===p)); }
+function clearCart(){ cart={}; $("custName").value=""; $("custMobile").value=""; renderCart(); }
 
 function cartLines(){
   return Object.keys(cart).map(id=>{ const m=db.menu.find(x=>x.id===id); return m?{id,name:m.name,price:m.price,qty:cart[id]}:null; }).filter(Boolean);
-}
-function calcDiscount(sub){
-  if(!appliedCoupon || sub<=0) return 0;
-  const c = appliedCoupon;
-  return c.type==="pct" ? Math.round(sub*c.value/100) : Math.min(c.value, sub);
 }
 function renderCart(){
   const lines = cartLines();
@@ -409,55 +374,43 @@ function renderCart(){
       <span class="amt">${rs(l.price*l.qty)}</span></div>`).join("")
     : `<div class="empty" style="padding:14px">Nothing added yet</div>`;
   const sub = lines.reduce((a,l)=>a+l.price*l.qty,0);
-  const disc = calcDiscount(sub);
-  $("tSub").textContent = rs(sub);
-  $("tDiscRow").style.display = disc ? "flex" : "none";
-  $("tDiscLbl").textContent = appliedCoupon ? "Coupon "+appliedCoupon.code : "Discount";
-  $("tDisc").textContent = "−"+rs(disc);
-  $("tTot").textContent = rs(sub-disc);
+  $("tTot").textContent = rs(sub);
   renderMenuGrid();
 }
-function applyCoupon(){
-  const code = $("couponInput").value.trim().toUpperCase();
-  if(!code){ appliedCoupon=null; $("couponMsg").textContent=""; renderCart(); return; }
-  const c = db.coupons.find(x=>x.code===code && x.active);
-  if(!c){ appliedCoupon=null; $("couponMsg").innerHTML=`<span style="color:var(--bad)">Invalid or inactive code</span>`; }
-  else { appliedCoupon=c; $("couponMsg").innerHTML=`<span style="color:var(--ok)">Applied: ${c.type==="pct"?c.value+"% off":rs(c.value)+" off"}</span>`; }
-  renderCart();
-}
 
-function createOrder(){
+async function createOrder(mode){
+  if(mode!=="Cash" && mode!=="UPI") return;
   const lines = cartLines();
   if(!lines.length){ toast("Add at least one item"); return; }
   const mobile = $("custMobile").value.replace(/\D/g,"");
   if(mobile && mobile.length!==10){ toast("Mobile should be 10 digits"); return; }
+  const amt = lines.reduce((a,l)=>a+l.price*l.qty,0);
+  if(!await ask(`${rs(amt)} received by ${mode}?\nThe token will be generated now.`,{ok:"Yes, generate token",safe:true})) return;
   if(db.tokenDate !== dayKey()){ db.tokenDate = dayKey(); db.lastToken = 0; }
   db.lastToken++;
-  const sub = lines.reduce((a,l)=>a+l.price*l.qty,0), disc = calcDiscount(sub), now = Date.now();
+  const sub = lines.reduce((a,l)=>a+l.price*l.qty,0), now = Date.now();
   const o = {
     id: now, token: String(db.lastToken).padStart(3,"0"), date: dayKey(), time: now,
     name: $("custName").value.trim() || "Walk-in", mobile,
     items: lines.map(l=>({name:l.name, price:l.price, qty:l.qty, delivered:0})),
-    subtotal: sub, couponCode: appliedCoupon ? appliedCoupon.code : "", discount: disc, total: sub-disc,
-    payStatus: payChoice==="pending" ? "pending" : "paid", payMode: payChoice==="pending" ? "" : payChoice,
-    paidAt: payChoice==="pending" ? null : now
+    subtotal: sub, total: sub,
+    payStatus: "paid", payMode: mode, paidAt: now
   };
   db.orders.push(o); save();
   clearCart();
-  openCoupon(o.id);
+  openSlip(o.id);
 }
 
-/* ---------- coupon / token slip ---------- */
-function openCoupon(id){
+/* ---------- token slip ---------- */
+function openSlip(id){
   const o = db.orders.find(x=>x.id===id); if(!o) return;
   const payTxt = isPaid(o) ? `PAID · ${esc(o.payMode)}` : `PAYMENT PENDING · ${rs(o.total)}`;
-  $("couponCard").innerHTML = `
+  $("slipCard").innerHTML = `
     <div class="c-brand">House of Tawi</div><div class="c-sub">KALADI KULCHA</div>
     <div class="c-lbl">TOKEN</div><div class="c-tok">#${esc(o.token)}</div>
     <div style="font-size:13px">${esc(o.name)} · ${timeStr(o.time)} · ${esc(o.date.split("-").reverse().join("/"))}</div>
     <div class="c-items">
       ${o.items.map(i=>`<div><span>${i.qty} x ${esc(i.name)}</span><span>${rs(i.price*i.qty)}</span></div>`).join("")}
-      ${o.discount?`<div><span>Coupon ${esc(o.couponCode)}</span><span>-${rs(o.discount)}</span></div>`:""}
       <div style="font-weight:900;margin-top:4px"><span>TOTAL</span><span>${rs(o.total)}</span></div>
     </div>
     <div class="c-pay">${payTxt}</div>
@@ -465,20 +418,18 @@ function openCoupon(id){
   $("waBtn").onclick = () => {
     const txt = `*House of Tawi – Kaladi Kulcha*\nToken: #${o.token}\n` +
       o.items.map(i=>`${i.qty} x ${i.name} – Rs.${i.price*i.qty}`).join("\n") +
-      (o.discount?`\nCoupon ${o.couponCode}: -Rs.${o.discount}`:"") +
       `\nTotal: Rs.${o.total}\n${isPaid(o)?"Paid ("+o.payMode+")":"Payment pending"}\nPlease show this token at the counter. Thank you!`;
     window.open(`https://wa.me/${o.mobile?"91"+o.mobile:""}?text=${encodeURIComponent(txt)}`, "_blank");
   };
-  $("couponModal").classList.add("on");
+  $("slipModal").classList.add("on");
 }
-function closeModal(){ $("couponModal").classList.remove("on"); }
+function closeModal(){ $("slipModal").classList.remove("on"); }
 
 /* ---------- orders board ---------- */
 let filter = "active";
 const FILTERS = [
   ["active","Open", o=>o.date===dayKey() && !(isPaid(o)&&isDelivered(o))],
   ["deliver","To deliver", o=>!isDelivered(o)],
-  ["unpaid","Unpaid", o=>!isPaid(o)],
   ["today","All today", o=>o.date===dayKey()],
   ["all","All days", ()=>true]
 ];
@@ -509,14 +460,14 @@ function orderCard(o){
       ${!del?`<button class="btn sm green" onclick="deliverAll(${o.id})">✓ All items handed over</button>`:""}
     </div>
     <div class="paybox">
-      <b class="money">${rs(o.total)}${o.discount?` <small style="color:var(--ok);font-size:12px">(${esc(o.couponCode)} −${rs(o.discount)})</small>`:""}</b>
+      <b class="money">${rs(o.total)}</b>
       <div class="row">
-        ${paid ? `<button class="btn sm ghost" onclick="unpay(${o.id})">Mark unpaid</button>`
+        ${paid ? `<button class="btn sm ghost" onclick="switchMode(${o.id})">Change to ${o.payMode==="UPI"?"Cash":"UPI"}</button>`
                : `<button class="btn sm gold" onclick="pay(${o.id},'Cash')">Paid Cash</button><button class="btn sm blue" onclick="pay(${o.id},'UPI')">Paid UPI</button>`}
       </div>
     </div>
     <div class="row" style="margin-top:10px;justify-content:space-between">
-      <button class="btn sm ghost" onclick="openCoupon(${o.id})">Show token slip</button>
+      <button class="btn sm ghost" onclick="openSlip(${o.id})">Show token slip</button>
       <button class="btn sm ghost" style="color:var(--bad)" onclick="delOrder(${o.id})">Delete</button>
     </div>
   </div>`;
@@ -525,21 +476,16 @@ const findO = id => db.orders.find(x=>x.id===id);
 function deliver(id,i,d){ const o=findO(id); const it=o.items[i]; it.delivered=Math.max(0,Math.min(it.qty,it.delivered+d)); if(isDelivered(o)) o.deliveredAt=Date.now(); save(); renderOrders(); }
 function deliverAll(id){ const o=findO(id); o.items.forEach(it=>it.delivered=it.qty); o.deliveredAt=Date.now(); save(); renderOrders(); toast("Token #"+o.token+" handed over"); }
 function pay(id,mode){ const o=findO(id); o.payStatus="paid"; o.payMode=mode; o.paidAt=Date.now(); save(); renderOrders(); toast(rs(o.total)+" received by "+mode); }
-async function unpay(id){ if(!await ask("Mark this order as unpaid again?",{ok:"Mark unpaid",safe:true})) return; const o=findO(id); o.payStatus="pending"; o.payMode=""; o.paidAt=null; save(); renderOrders(); }
+async function switchMode(id){ const o=findO(id); const to=o.payMode==="UPI"?"Cash":"UPI"; if(!await ask(`Token #${o.token}: change payment from ${o.payMode} to ${to}?`,{ok:"Change to "+to,safe:true})) return; o.payMode=to; save(); renderOrders(); toast("Changed to "+to); }
 async function delOrder(id){ const o=findO(id); if(!await ask(`Delete token #${o.token} (${o.name}, ${rs(o.total)})? This cannot be undone.`,{ok:"Delete"})) return; db.orders=db.orders.filter(x=>x.id!==id); save(); renderOrders(); }
 
-/* ---------- menu & coupons ---------- */
+/* ---------- menu ---------- */
 function renderMenuEdit(){
   $("menuEdit").innerHTML = db.menu.map(m=>`<div class="mrow">
     <input value="${esc(m.name)}" onchange="updMenu('${m.id}','name',this.value)">
     <input type="number" inputmode="numeric" value="${m.price}" onchange="updMenu('${m.id}','price',this.value)">
     <input type="checkbox" class="sw" ${m.active?"checked":""} onchange="updMenu('${m.id}','active',this.checked)">
     <button class="x" onclick="delMenu('${m.id}')">✕</button></div>`).join("") || `<div class="hint">No items yet.</div>`;
-  $("couponEdit").innerHTML = db.coupons.length ? db.coupons.map((c,i)=>`<div class="mrow">
-    <b>${esc(c.code)}</b><span>${c.type==="pct"?c.value+"%":rs(c.value)+" off"}</span>
-    <input type="checkbox" class="sw" ${c.active?"checked":""} onchange="db.coupons[${i}].active=this.checked;save()">
-    <button class="x" onclick="delCoupon(${i})">✕</button></div>`).join("")
-    : `<div class="hint">No coupons yet. Add one below (e.g. FEST10 = 10% off, or FLAT50 = ₹50 off).</div>`;
 }
 function updMenu(id,f,v){
   const m=db.menu.find(x=>x.id===id);
@@ -553,16 +499,7 @@ function addMenuItem(){
   db.menu.push({id:"m"+Date.now(), name:n, price:p, active:true}); save();
   $("newItemName").value=""; $("newItemPrice").value=""; renderMenuEdit(); toast(n+" added");
 }
-async function delCoupon(i){ if(!await ask(`Delete coupon ${db.coupons[i].code}?`,{ok:"Delete"})) return; db.coupons.splice(i,1); save(); renderMenuEdit(); }
 async function delMenu(id){ const m=db.menu.find(x=>x.id===id); if(!await ask(`Remove "${m.name}" from the menu? Past orders are not affected.`,{ok:"Remove"})) return; db.menu=db.menu.filter(x=>x.id!==id); delete cart[id]; save(); renderMenuEdit(); }
-function addCoupon(){
-  const code=$("newCode").value.trim().toUpperCase().replace(/\s/g,""), val=+$("newVal").value, type=$("newType").value;
-  if(!code || !(val>0)){ toast("Enter code and value"); return; }
-  if(type==="pct" && val>100){ toast("Percent cannot exceed 100"); return; }
-  if(db.coupons.some(c=>c.code===code)){ toast("Code already exists"); return; }
-  db.coupons.push({code,type,value:val,active:true}); save();
-  $("newCode").value=""; $("newVal").value=""; renderMenuEdit(); toast("Coupon "+code+" added");
-}
 async function resetToken(){ if(!await ask("Next order will get token #001. Continue?",{ok:"Restart",safe:true})) return; db.tokenDate=dayKey(); db.lastToken=0; save(); toast("Tokens restarted"); }
 
 /* ---------- summary ---------- */
@@ -572,19 +509,18 @@ function renderSummary(){
   const sum=f=>list.filter(f).reduce((a,o)=>a+o.total,0);
   const sales=sum(()=>true), cash=sum(o=>isPaid(o)&&o.payMode==="Cash"), upi=sum(o=>isPaid(o)&&o.payMode==="UPI");
   const other=sum(o=>isPaid(o)&&o.payMode!=="Cash"&&o.payMode!=="UPI"), pend=sum(o=>!isPaid(o));
-  const disc=list.reduce((a,o)=>a+(o.discount||0),0), undel=list.filter(o=>!isDelivered(o)).length;
+  const undel=list.filter(o=>!isDelivered(o)).length;
   const stat=(l,v,c,h)=>`<div class="stat ${h?"hero":""}"><span>${l}</span><b style="${c?"color:"+c:""}">${v}</b></div>`;
   $("statGrid").innerHTML = stat("Orders",list.length)+stat("Total sales",rs(sales),"",1)+
     stat("Received – Cash",rs(cash),"var(--ok)")+stat("Received – UPI",rs(upi),"var(--blue)")+
-    stat("Pending to collect",rs(pend),pend?"var(--bad)":"")+stat("Coupon discounts",rs(disc))+
+    (pend?stat("Pending to collect (old entries)",rs(pend),"var(--bad)"):"")+
     stat("Orders not yet delivered",undel,undel?"var(--warn)":"")+(other?stat("Paid – mode not recorded",rs(other)):"");
   const map={};
   list.forEach(o=>o.items.forEach(i=>{ map[i.name]=map[i.name]||{q:0,a:0}; map[i.name].q+=i.qty; map[i.name].a+=i.qty*i.price; }));
   const rows=Object.entries(map).sort((a,b)=>b[1].a-a[1].a);
   $("itemTable").innerHTML = rows.length ? `<table><tr><th>Item</th><th class="r">Qty</th><th class="r">Amount</th></tr>
     ${rows.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="r">${v.q}</td><td class="r">${rs(v.a)}</td></tr>`).join("")}
-    ${disc?`<tr><td>Less: coupon discounts</td><td></td><td class="r">−${rs(disc)}</td></tr>`:""}
-    <tr><th>Net</th><th></th><th class="r">${rs(sales)}</th></tr></table>` : `<div class="empty">No sales</div>`;
+    <tr><th>Total</th><th></th><th class="r">${rs(sales)}</th></tr></table>` : `<div class="empty">No sales</div>`;
 }
 async function download(name,content,type){
   const dl = await downloadsReady;
@@ -600,9 +536,9 @@ function exportCSV(){
   const d=$("sumDate").value, list=db.orders.filter(o=>!d||o.date===d).sort((a,b)=>a.time-b.time);
   if(!list.length){ toast("No data to export"); return; }
   const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  const head=["Date","Time","Token","Name","Mobile","Items Ordered","Subtotal","Coupon","Discount","Total","Payment Status","Payment Mode","Delivery Status","Qty Delivered"];
+  const head=["Date","Time","Token","Name","Mobile","Items Ordered","Total","Payment Status","Payment Mode","Delivery Status","Qty Delivered"];
   const rows=list.map(o=>[o.date.split("-").reverse().join("/"),timeStr(o.time),"#"+o.token,o.name,o.mobile,
-    o.items.map(i=>`${i.qty}x ${i.name} @${i.price}`).join("; "),o.subtotal,o.couponCode,o.discount,o.total,
+    o.items.map(i=>`${i.qty}x ${i.name} @${i.price}`).join("; "),o.total,
     isPaid(o)?"Paid":"Pending",o.payMode,isDelivered(o)?"Delivered":(qtyGiven(o)?"Partly delivered":"Not delivered"),qtyGiven(o)+"/"+qtyTotal(o)].map(q).join(","));
   download(`HouseOfTawi_Sales_${d||"All"}.csv`,"\ufeff"+head.map(q).join(",")+"\n"+rows.join("\n"),"text/csv;charset=utf-8");
 }
@@ -612,7 +548,7 @@ function restoreJSON(inp){
   const r=new FileReader();
   r.onload=async ()=>{ try{ const d=JSON.parse(r.result); if(!Array.isArray(d.orders)||!Array.isArray(d.menu)) throw 0;
       if(!await ask(`Replace current data with this backup (${d.orders.length} orders)?`,{ok:"Replace"})) { inp.value=""; return; }
-      d.coupons=d.coupons||[]; db=d; save(); renderAll(); toast("Backup restored"); }
+      delete d.coupons; db=d; save(); renderAll(); toast("Backup restored"); }
     catch(e){ tell("That file is not a valid House of Tawi backup."); } inp.value=""; };
   r.readAsText(f);
 }
@@ -642,3 +578,4 @@ try { navigator.storage && navigator.storage.persist && navigator.storage.persis
 </script>
 </body>
 </html>
+
